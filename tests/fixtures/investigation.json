@@ -1,0 +1,1 @@
+{"investigation_id":"00000000-0000-4000-8000-000000000001","repository":"demo/checkout","branch":"main","endpoint":"https://checkout.example/health","permission":"create_pr","incident_at":"2026-10-24T04:00:00Z"}
