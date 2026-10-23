@@ -1,0 +1,9 @@
+{
+  "provenance": "Synthetic GitHub REST-shaped fixture; not a live response",
+  "repository": "demo/checkout", "default_branch": "main",
+  "commits": [
+    {"sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","html_url":"https://example.invalid/demo/commit/a","commit":{"message":"Docs cleanup","committer":{"date":"2026-10-24T03:59:00Z"}},"files":[{"filename":"README.md","patch":"+Example documentation"}]},
+    {"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","html_url":"https://example.invalid/demo/commit/b","commit":{"message":"Break health configuration","committer":{"date":"2026-10-24T03:55:00Z"}},"files":[{"filename":"config.json","patch":"-\"healthy\": true\n+\"healthy\": false\n+HTTP 503"},{"filename":"requirements.txt","patch":"+demo-vulnerable==1.0.0"}]}
+  ],
+  "files": {"config.json":"{\"healthy\": false}\n","requirements.txt":"demo-vulnerable==1.0.0\n","unsafe_sample.py":"import requests\nrequests.get('https://example.invalid', verify=False)\n"}
+}

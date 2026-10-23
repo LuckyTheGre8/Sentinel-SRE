@@ -1,0 +1,5 @@
+{
+  "provenance": "Synthetic OSV-shaped vulnerability for a fictional, never-installed demo package",
+  "queries": {"PyPI:demo-vulnerable:1.0.0":{"vulns":[{"id":"DEMO-2026-001","modified":"2026-10-24T00:00:00Z"}]},"PyPI:demo-vulnerable:1.0.1":{}},
+  "details": {"DEMO-2026-001":{"id":"DEMO-2026-001","aliases":["DEMO-ALIAS-001"],"database_specific":{"severity":"HIGH"},"affected":[{"package":{"ecosystem":"PyPI","name":"demo-vulnerable"},"ranges":[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"1.0.1"}]}]}],"references":[{"type":"ADVISORY","url":"https://example.invalid/advisories/DEMO-2026-001"}]}}
+}

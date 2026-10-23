@@ -33,3 +33,30 @@ merging are rejected by configuration. State and caches belong in ignored direct
 Typed contracts enforce correlation IDs, UTC timestamps and structured failures.
 SQLite persists investigation states and rejects invalid transitions. Redacting log
 formatters sanitize messages and tracebacks. Tests cover all state transition pairs.
+
+## Evidence workers
+
+Telemetry bounds response size and time, refuses redirects, and distinguishes HTTP,
+DNS, TLS, timeout and connection failure. Real HTTP is permitted only for exact
+allowlisted numeric loopback URLs in explicit demo mode; public-host probes require
+a recorded transport. This deliberately prevents DNS rebinding in the local build.
+Commit ranking uses time, changed service paths and breaking diff signals, never
+author identity. Scores describe correlation, not proof.
+
+Security supports exact requirements/PEP 621 pins, npm package-lock versions,
+exact package.json versions, simple Go modules and Maven versions. Dockerfiles get
+a digest-pin check. Unresolved ranges and unsupported lockfiles produce warnings.
+Narrow Python AST checks cover credential literals, interpolated execute calls,
+shell=True, verify=False and wildcard CORS. Risk is max(severity weight × confidence),
+with critical/high/medium/low/info weights 10/8/5/2/0; it never affects incident ranking.
+The fictional demo-vulnerable package is fixture data and is never installed.
+
+Official interface references checked during implementation:
+- [GitHub commits](https://docs.github.com/en/rest/commits/commits)
+- [OSV batch IDs](https://github.com/google/osv.dev/blob/master/docs/api/post-v1-querybatch.md)
+- [OSV full records](https://github.com/google/osv.dev/blob/master/docs/api/get-v1-vulns.md)
+
+Fixtures are synthetic API-shaped records, not captured live success. Missing OSV
+coverage returns incomplete analysis. An unknown fixed version stays unknown.
+On restricted Windows hosts, asyncio may require permission to open its internal
+loopback socket pair even when all service calls are mocked.
