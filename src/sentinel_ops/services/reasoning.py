@@ -25,6 +25,23 @@ class LocalReasoningClient:
             return parsed
         except json.JSONDecodeError:
             result: dict = {}
+            # Supported local prose form carries every saved approval identifier.
+            # Ambiguous consent is never inferred from a bare "yes" or model prose.
+            confirmation = re.fullmatch(
+                r"confirm proposal ([0-9a-f-]{36}) investigation ([0-9a-f-]{36}) "
+                r"confirmation ([0-9a-f-]{36}) idempotency_key ([0-9a-f]{64})",
+                text.strip(),
+                re.IGNORECASE,
+            )
+            if confirmation:
+                return dict(
+                    zip(
+                        ["proposal_id", "investigation_id", "confirmation", "idempotency_key"],
+                        confirmation.groups(),
+                        strict=True,
+                    ),
+                    action="confirm",
+                )
             url = re.search(r"https?://[^\s`]+", text)
             cleaned = text
             if url:
@@ -39,7 +56,10 @@ class LocalReasoningClient:
             window = re.search(r"\b(\d+)\s*hours?", text)
             if window:
                 result["lookback_hours"] = int(window.group(1))
-            result["permission"] = "create_pr" if "create_pr" in text else "read_only"
+            if "create_pr" in text:
+                result["permission"] = "create_pr"
+            elif "read_only" in text:
+                result["permission"] = "read_only"
             return result
 
     async def synthesize(

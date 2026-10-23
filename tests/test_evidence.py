@@ -169,3 +169,27 @@ def test_narrow_sast_redacts():
     )
     assert len(findings) == 6
     assert value not in str(findings)
+
+
+def test_malformed_and_unresolved_manifests_warn():
+    deps, warnings = dependencies(
+        {
+            "package.json": "[]",
+            "requirements.txt": "requests[socks]==2.32.0; python_version > '3.9'",
+            "uv.lock": "version = 1",
+        }
+    )
+    assert not deps and len(warnings) == 3
+
+
+async def test_withdrawn_advisory_and_python_parse_failure():
+    osv = RecordedOSVClient(FIXTURES / "osv.json")
+    osv.data["details"]["DEMO-2026-001"]["withdrawn"] = "2026-10-24T04:00:00Z"
+    result = await SecurityInvestigator(osv).run(
+        SecurityScanRequest(
+            files={"requirements.txt": "demo-vulnerable==1.0.0", "broken.py": "def broken("}
+        )
+    )
+    assert not result.findings
+    assert any("Withdrawn" in w for w in result.warnings)
+    assert any("parse failed" in w for w in result.warnings)

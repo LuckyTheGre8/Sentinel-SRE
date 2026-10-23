@@ -25,7 +25,9 @@ def dependencies(files: dict[str, str]) -> tuple[list[Dependency], list[str]]:
                     for m in re.findall(r"(?m)^([\w.-]+)==([\w.+-]+)\s*$", text)
                 ]
                 if any(
-                    line.strip() and not line.startswith("#") and "==" not in line
+                    line.strip()
+                    and not line.startswith("#")
+                    and not re.fullmatch(r"[\w.-]+==[\w.+-]+", line.strip())
                     for line in text.splitlines()
                 ):
                     warnings.append(f"Unresolved requirements omitted: {path}")
@@ -71,7 +73,7 @@ def dependencies(files: dict[str, str]) -> tuple[list[Dependency], list[str]]:
             elif path.endswith((".lock", "lock.yaml")):
                 warnings.append(f"Unsupported lockfile: {path}")
             found.extend(Dependency(ecosystem=e, name=n, version=v, file=path) for e, n, v in items)
-        except (ValueError, ET.ParseError, TypeError):
+        except (ValueError, ET.ParseError, TypeError, AttributeError):
             warnings.append(f"Invalid manifest: {path}")
     return found, warnings
 

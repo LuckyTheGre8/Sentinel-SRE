@@ -1,3 +1,4 @@
+import asyncio
 from datetime import timedelta
 
 from sentinel_ops.logging import redact
@@ -18,8 +19,8 @@ class CommitDetective:
     async def run(self, request: CommitAnalysisRequest) -> CommitAnalysisResponse:
         start = utcnow()
         try:
-            commits = await self.client.commits(
-                request.repository, request.branch, request.max_commits
+            commits = await asyncio.wait_for(
+                self.client.commits(request.repository, request.branch, request.max_commits), 3
             )
         except (OSError, ValueError, TimeoutError):
             return CommitAnalysisResponse(

@@ -39,3 +39,6 @@ ignore_missing_imports = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/sentinel_ops"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/scripts", "/demo_service", "/docs", "/README.md", "/pyproject.toml", "/uv.lock", "/.python-version", "/.env.example", "/.gitignore"]

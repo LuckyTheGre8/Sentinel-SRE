@@ -152,15 +152,44 @@ class SentinelOrchestrator:
                     code="no_commit_evidence", message="Security scan lacks relevant revision"
                 ),
             )
-        hypothesis = await asyncio.wait_for(self.reasoning.synthesize(health, commits), 3)
+        reasoning_warning = None
+        try:
+            hypothesis = await asyncio.wait_for(self.reasoning.synthesize(health, commits), 3)
+        except (TimeoutError, ValueError, OSError):
+            hypothesis = IncidentHypothesis(
+                summary="Reasoning unavailable", confidence="insufficient_evidence", evidence_ids=[]
+            )
+            reasoning_warning = "Reasoning unavailable; structured worker evidence retained"
         allowed = {e.id for r in (health, commits, security) for e in r.evidence}
-        if not set(hypothesis.evidence_ids) <= allowed:
+        candidates = {c.sha: c for c in commits.commits}
+        if not set(hypothesis.evidence_ids) <= allowed or (
+            hypothesis.commit_sha and hypothesis.commit_sha not in candidates
+        ):
             hypothesis = IncidentHypothesis(
                 summary="Reasoning output rejected: unsupported evidence references",
                 confidence="insufficient_evidence",
                 evidence_ids=[],
             )
+            reasoning_warning = (
+                "Reasoning output rejected: unsupported evidence or commit reference"
+            )
+        # Never pass free-form model factual claims through just because its references exist.
+        selected = candidates.get(hypothesis.commit_sha or "")
+        hypothesis.summary = f"Observed health: {health.state}. " + (
+            f"Candidate {selected.sha[:8]} has score {selected.score:.3f} from recorded diff/time correlation; not proof of causation."
+            if selected
+            else "No evidence-backed commit hypothesis established."
+        )
+        hypothesis.evidence_ids = [e.id for e in health.evidence] + (
+            [f"commit:{selected.sha}"] if selected else []
+        )
+        if health.state != "failing" or not selected:
+            hypothesis.confidence = "insufficient_evidence"
+        elif hypothesis.confidence == "high":
+            hypothesis.confidence = "medium"
         warnings = [w for r in (health, commits, security) for w in r.warnings]
+        if reasoning_warning:
+            warnings.append(reasoning_warning)
         warnings.extend(r.error.message for r in (health, commits, security) if r.error)
         if health.state == "healthy" and commits.commits and commits.commits[0].score > 0.5:
             warnings.append(

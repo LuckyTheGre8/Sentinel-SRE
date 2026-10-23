@@ -57,5 +57,10 @@ class TelemetryWatchdog:
                 )
                 for i, p in enumerate(probes)
             ],
-            warnings=["Recorded HTTP transport"] if self.client.simulated else [],
+            warnings=(["Recorded HTTP transport"] if self.client.simulated else [])
+            + (
+                ["Some probes unavailable; health evidence is incomplete"]
+                if len(known) < len(probes)
+                else []
+            ),
         )

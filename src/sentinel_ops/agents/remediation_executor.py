@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import json
+import sqlite3
 from datetime import timedelta
 from typing import Literal
 from uuid import UUID, uuid4
@@ -34,13 +35,13 @@ def pr_body(proposal: RemediationProposal) -> str:
     evidence = "\n".join(f"- {e.id}: {e.summary}" for e in proposal.evidence)
     return (
         f"# LOCAL SIMULATED PR\nInvestigation: {proposal.investigation_id}\n"
-        f"Incident: failing demo checkout health\nAction: {proposal.action}\n"
+        f"Incident: demo checkout investigation\nAction: {proposal.action}\n"
         f"Confidence: {proposal.confidence}; correlation is not proof\n"
         f"Files: {', '.join(proposal.expected_files)}\nEvidence:\n{evidence}\n"
         "Validation: approved path/size/baseline hashes and configuration JSON checked.\n"
         f"Requested tests: {', '.join(proposal.tests)}. Health recovery not yet verified.\n"
         "Rollback: restore the saved pre-action sandbox snapshot using a fresh demo reset.\n"
-        "Security: fictional demo dependency restored to fixture fixed version.\n"
+        f"Security: {'dependency manifest changed; inspect approved replacement' if 'requirements.txt' in proposal.replacements else 'no dependency remediation claimed'}.\n"
         "Agent-generated and explicitly user-approved in the local simulator. No GitHub write or merge.\n"
     )
 
@@ -117,7 +118,10 @@ class RemediationExecutor:
             return fail("confirmation_required", "Unknown proposal")
         saved = json.loads(raw)
         proposal = RemediationProposal.model_validate(saved["proposal"])
-        context = self.store.get(request.investigation_id)
+        try:
+            context = self.store.get(request.investigation_id)
+        except KeyError:
+            return fail("confirmation_required", "Unknown investigation")
         if (
             proposal.investigation_id != request.investigation_id
             or saved["session"] != request.session_id
@@ -147,7 +151,7 @@ class RemediationExecutor:
             if context.status == Status.AWAITING:
                 self.store.transition(request.investigation_id, Status.EXECUTING)
             number, url = await self.client.create_pr(proposal, saved["key"], pr_body(proposal))
-        except (ValueError, OSError):
+        except (ValueError, OSError, sqlite3.Error):
             if self.store.get(request.investigation_id).status == Status.EXECUTING:
                 self.store.transition(request.investigation_id, Status.FAILED)
             return fail(

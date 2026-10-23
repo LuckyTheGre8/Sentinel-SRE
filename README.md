@@ -28,6 +28,22 @@ No credentials are needed. `.env.example` contains blank names for future integr
 the local build does not load or use external credentials. Payments and automatic
 merging are rejected by configuration. State and caches belong in ignored directories.
 
+## Complete local demo
+
+```powershell
+uv run --frozen python -m sentinel_ops.demo smoke --runs 2
+```
+
+Each run checks real loopback HTTP 503, ranks the synthetic bad change, detects the
+synthetic vulnerability, rejects missing confirmation, creates one simulated PR across
+a restart, applies the approved local recovery and independently observes HTTP 200.
+
+For manual approval, run `python -m sentinel_ops.demo init`, then
+`python -m sentinel_ops.demo serve` in one terminal and `python -m sentinel_ops.demo chat`
+in another using the project environment. Type `CONFIRM` when prompted.
+See [local-demo.md](docs/local-demo.md) for exact setup, reset and verification commands,
+and [architecture.md](docs/architecture.md) for component boundaries and limitations.
+
 ## Foundation
 
 Typed contracts enforce correlation IDs, UTC timestamps and structured failures.

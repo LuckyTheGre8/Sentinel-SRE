@@ -64,6 +64,12 @@ class ChatGateway:
                 self.store.put("intake", owner, "")
                 replies = [text_message("Cancelled local interaction.")]
             elif action == "intake":
+                draft = self.store.read("intake_draft", owner)
+                data = {**(json.loads(draft) if draft else {}), **data}
+                allowed = set(InvestigationRequest.model_fields)
+                if not set(data) <= allowed:
+                    raise ValueError("Unsupported intake fields")
+                self.store.put("intake_draft", owner, json.dumps(data))
                 missing = [k for k in ("repository", "endpoint") if not data.get(k)]
                 if missing:
                     replies = [cards.intake(missing)]

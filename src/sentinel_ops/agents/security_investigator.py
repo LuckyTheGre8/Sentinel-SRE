@@ -1,3 +1,6 @@
+import ast
+import asyncio
+
 from sentinel_ops.schemas import (
     AgentError,
     Evidence,
@@ -24,14 +27,23 @@ class SecurityInvestigator:
             warnings.append(f"Oversized file omitted: {path}")
         deps, parser_warnings = dependencies(files)
         warnings.extend(parser_warnings)
+        for path, content in files.items():
+            if path.endswith(".py"):
+                try:
+                    ast.parse(content)
+                except SyntaxError:
+                    warnings.append(f"Python parse failed; code analysis incomplete: {path}")
         findings = code_findings(files, request.incident_files)
         error = None
         try:
-            results = await self.client.query_batch(deps)
+            results = await asyncio.wait_for(self.client.query_batch(deps), 3)
             if len(results) != len(deps):
                 raise ValueError("OSV batch length mismatch")
             for dep, vulns in zip(deps, results, strict=True):
                 for vuln in vulns:
+                    if vuln.get("withdrawn"):
+                        warnings.append(f"Withdrawn advisory omitted: {vuln['id']}")
+                        continue
                     affected = [
                         a
                         for a in vuln.get("affected", [])
@@ -47,7 +59,7 @@ class SecurityInvestigator:
                             if "fixed" in event
                         }
                     )
-                    severity = vuln.get("database_specific", {}).get("severity", "medium").lower()
+                    severity = vuln.get("database_specific", {}).get("severity", "unknown").lower()
                     if severity not in {"critical", "high", "medium", "low", "info"}:
                         severity = "medium"
                         warnings.append(

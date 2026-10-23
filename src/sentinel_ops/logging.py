@@ -27,3 +27,11 @@ def redact(text: str) -> str:
 class RedactingFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         return redact(super().format(record))
+
+
+def configure_logging() -> None:
+    root = logging.getLogger()
+    if not root.handlers:
+        root.addHandler(logging.StreamHandler())
+    for handler in root.handlers:
+        handler.setFormatter(RedactingFormatter("%(levelname)s:%(name)s:%(message)s"))
