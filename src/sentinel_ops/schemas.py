@@ -27,12 +27,26 @@ Repository = Annotated[str, Field(pattern=r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")]
 
 def safe_path(path: str) -> str:
     parts = PurePosixPath(path).parts
+    reserved = {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        *(f"com{i}" for i in range(1, 10)),
+        *(f"lpt{i}" for i in range(1, 10)),
+    }
     if (
         not path
         or "\\" in path
         or ":" in path
         or path.startswith("/")
-        or any(p in {"..", ".git", ".env"} for p in parts)
+        or any(
+            p == ".."
+            or p.lower() == ".git"
+            or p.lower().startswith(".env")
+            or p.lower().split(".")[0] in reserved
+            for p in parts
+        )
         or any(p.endswith((".", " ")) for p in parts)
         or path != str(PurePosixPath(path))
     ):

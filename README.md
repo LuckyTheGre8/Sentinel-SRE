@@ -75,3 +75,19 @@ Cards use the documented v1 `form`, `detail` and `review` schemas with JSON-stri
 metadata. No protocol is attached to a running network agent or published.
 - [ACP reference](https://innovationlab.fetch.ai/resources/docs/agent-communication/agent-chat-protocol)
 - [Cards reference](https://innovationlab.fetch.ai/resources/docs/interactive-cards/asi-interactive-cards)
+
+## Safe sandbox remediation
+
+Proposals persist an exact approved file set, baseline hashes, replacements, evidence,
+session identity, ten-minute approval expiry and a stable action key. Confirmation
+must match all saved fields. Replayed confirmation returns the same durable simulated
+PR, including after restarting the process. Superseded or expired proposals fail closed.
+Revert uses the known fixture's inverse; patch mode uses bounded full-file replacements,
+not arbitrary commands or untrusted unified patches. Traversal, Windows special paths,
+case collisions, oversized content, changed baselines and extra files are rejected.
+
+The sandbox stores files and PR records atomically in SQLite. `sandbox://` PR references
+are local simulation identifiers, not web URLs. PR creation leaves service state unchanged.
+The separate explicit local-demo apply hook changes only the sandbox snapshot. It is
+not a Git merge and never writes a real repository branch. Health verification follows
+as an independent operation. No backend is provided for live GitHub writes.
