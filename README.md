@@ -60,3 +60,18 @@ Fixtures are synthetic API-shaped records, not captured live success. Missing OS
 coverage returns incomplete analysis. An unknown fixed version stays unknown.
 On restricted Windows hosts, asyncio may require permission to open its internal
 loopback socket pair even when all service calls are mocked.
+
+## Local ACP conversation
+
+Run `uv run --frozen python -m sentinel_ops.simulator` for a recorded read-only
+conversation. Official ACP 0.3.0 models provide acknowledgements and card envelopes;
+the local transport serializes every worker message and checks investigation IDs.
+The deterministic reasoning adapter implements the same extraction/synthesis boundary
+intended for ASI:One, but makes no LLM calls. Worker calls have deadlines, one transient
+retry with jitter, and a cooldown. Reports retain partial findings and flag conflicting
+health/commit evidence. Duplicate chat messages reuse persisted replies.
+
+Cards use the documented v1 `form`, `detail` and `review` schemas with JSON-stringified
+metadata. No protocol is attached to a running network agent or published.
+- [ACP reference](https://innovationlab.fetch.ai/resources/docs/agent-communication/agent-chat-protocol)
+- [Cards reference](https://innovationlab.fetch.ai/resources/docs/interactive-cards/asi-interactive-cards)
