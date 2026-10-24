@@ -220,6 +220,8 @@ class RemediationProposal(Message):
     expected_files: list[SafePath] = Field(min_length=1, max_length=20)
     replacements: dict[SafePath, str] = Field(default_factory=dict)
     expected_hashes: dict[SafePath, str] = Field(default_factory=dict)
+    base_sha: str | None = None
+    file_modes: dict[SafePath, str] = Field(default_factory=dict)
     evidence: list[Evidence]
     confidence: str
     tests: list[str] = Field(default_factory=lambda: ["local health probe"])
@@ -238,7 +240,7 @@ class RemediationExecutionResponse(Response):
     pr_number: int | None = None
     pr_url: str | None = None
     validation: str = "not_run"
-    simulated: Literal[True] = True
+    simulated: bool = True
 
 
 class VerificationRequest(HealthCheckRequest):

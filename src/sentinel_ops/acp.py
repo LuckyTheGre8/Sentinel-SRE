@@ -7,12 +7,14 @@ from uagents import Protocol
 from uagents_core.contrib.protocols.chat import (
     ChatAcknowledgement,
     ChatMessage,
+    StartSessionContent,
     TextContent,
     chat_protocol_spec,
 )
 
 from sentinel_ops import cards
 from sentinel_ops.schemas import AgentError, InvestigationContext, InvestigationRequest, Status
+from sentinel_ops.services.health_client import validate_url
 
 
 def text_message(text: str) -> ChatMessage:
@@ -20,9 +22,16 @@ def text_message(text: str) -> ChatMessage:
 
 
 class ChatGateway:
+    simulated = True
+    remediation_enabled = True
+    patch_enabled = True
+
     def __init__(self, orchestrator):
         self.orchestrator = orchestrator
         self.store = orchestrator.store
+
+    def validate_intake(self, data):
+        pass
 
     async def handle(self, sender: str, session: str, message: ChatMessage):
         ack = ChatAcknowledgement(acknowledged_msg_id=message.msg_id)
@@ -32,13 +41,18 @@ class ChatGateway:
         if cached:
             return [ack, *[ChatMessage.model_validate(x) for x in json.loads(cached)]]
         try:
-            if not message.content or any(not isinstance(c, TextContent) for c in message.content):
+            content = [c for c in message.content if not isinstance(c, StartSessionContent)]
+            if not content or any(not isinstance(c, TextContent) for c in content):
                 raise ValueError("Only text and card selection inputs supported locally")
-            text = "\n".join(c.text for c in message.content)
+            text = "\n".join(c.text for c in content)
             if len(text.encode()) > 8192:
                 raise ValueError("Input exceeds local limit")
             data = await self.orchestrator.reasoning.extract(text)
+            if not isinstance(data, dict):
+                raise ValueError("Expected structured input")
             action = data.pop("action", "intake")
+            if not isinstance(action, str):
+                raise ValueError("Invalid action")
             if action == "start":
                 raw = self.store.read("intake", owner)
                 if raw is None:
@@ -52,11 +66,19 @@ class ChatGateway:
                 except KeyError:
                     self.store.create(context)
                 else:
-                    if current.status != Status.CREATED:
+                    if current.status != Status.CREATED or current.session_id != owner:
                         raise ValueError("Investigation already started")
                 report = await self.orchestrator.investigate(context)
                 self.store.put("session", owner, str(context.investigation_id))
-                replies = [cards.progress(), cards.incident_report(report)]
+                replies = [
+                    cards.incident_report(
+                        report,
+                        simulated=self.simulated,
+                        remediation_enabled=self.remediation_enabled
+                        and context.permission == "create_pr",
+                        patch_enabled=self.patch_enabled,
+                    )
+                ]
             elif action == "cancel":
                 current_id = self.store.read("session", owner)
                 if current_id:
@@ -69,10 +91,15 @@ class ChatGateway:
                 allowed = set(InvestigationRequest.model_fields)
                 if not set(data) <= allowed:
                     raise ValueError("Unsupported intake fields")
+                self.validate_intake(data)
+                if "endpoint" in data:
+                    if not isinstance(data["endpoint"], str):
+                        raise ValueError("Invalid endpoint")
+                    validate_url(data["endpoint"], local_demo=True)
                 self.store.put("intake_draft", owner, json.dumps(data))
                 missing = [k for k in ("repository", "endpoint") if not data.get(k)]
                 if missing:
-                    replies = [cards.intake(missing)]
+                    replies = [cards.intake(missing, simulated=self.simulated)]
                 else:
                     if not data.get("branch"):
                         data["branch"] = await self.orchestrator.commits.client.default_branch(
@@ -80,10 +107,10 @@ class ChatGateway:
                         )
                     request = InvestigationRequest.model_validate(data)
                     self.store.put("intake", owner, request.model_dump_json())
-                    replies = [cards.review_intake(request)]
+                    replies = [cards.review_intake(request, simulated=self.simulated)]
             else:
                 replies = await self.action(owner, action, data)
-        except (ValueError, KeyError, TimeoutError):
+        except (ValueError, KeyError, TimeoutError, OSError):
             error = AgentError(
                 code="unsupported_input",
                 message="Input/action invalid, incomplete, expired, or outside local fixture coverage",
@@ -107,7 +134,8 @@ def build_protocol(gateway: ChatGateway) -> Protocol:
 
     @protocol.on_message(ChatMessage)
     async def message(ctx, sender: str, msg: ChatMessage):
-        for response in await gateway.handle(sender, str(ctx.session), msg):
+        await ctx.send(sender, ChatAcknowledgement(acknowledged_msg_id=msg.msg_id))
+        for response in (await gateway.handle(sender, str(ctx.session), msg))[1:]:
             await ctx.send(sender, response)
 
     @protocol.on_message(ChatAcknowledgement)

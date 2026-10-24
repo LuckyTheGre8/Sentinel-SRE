@@ -13,12 +13,18 @@ from sentinel_ops.services.security import code_findings, dependencies
 
 
 class SecurityInvestigator:
-    def __init__(self, client: OSVClient):
+    def __init__(self, client: OSVClient, timeout: float = 3):
         self.client = client
+        self.timeout = timeout
 
     async def run(self, request: SecurityScanRequest) -> SecurityScanResponse:
+        simulated = getattr(self.client, "simulated", True)
         files = dict(list(request.files.items())[:100])
-        warnings = ["Recorded OSV data; narrow SAST is not a complete security audit"]
+        warnings = (
+            ["Recorded OSV data; narrow SAST is not a complete security audit"]
+            if simulated
+            else ["Narrow SAST is not a complete security audit"]
+        )
         if len(request.files) > 100:
             warnings.append("File count truncated")
         oversized = [p for p, content in files.items() if len(content.encode()) > 65536]
@@ -36,7 +42,7 @@ class SecurityInvestigator:
         findings = code_findings(files, request.incident_files)
         error = None
         try:
-            results = await asyncio.wait_for(self.client.query_batch(deps), 3)
+            results = await asyncio.wait_for(self.client.query_batch(deps), self.timeout)
             if len(results) != len(deps):
                 raise ValueError("OSV batch length mismatch")
             for dep, vulns in zip(deps, results, strict=True):
@@ -96,7 +102,12 @@ class SecurityInvestigator:
             warnings=warnings,
             risk_score=risk,
             evidence=[
-                Evidence(id=f"security:{f.id}", source="security", summary=f.evidence)
+                Evidence(
+                    id=f"security:{f.id}",
+                    source="security",
+                    summary=f.evidence,
+                    simulated=simulated if f.kind == "dependency" else False,
+                )
                 for f in findings
             ],
         )

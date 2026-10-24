@@ -4,7 +4,9 @@
 ![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
 
 Incident evidence, confirmed sandbox remediation, and independent recovery verification.
-This build is local-only. External GitHub, ASI:One and Agentverse actions are disabled.
+The deterministic demo remains local-only. Read-only live GitHub and OSV adapters are
+available for explicit runtime injection; ASI:One reasoning, live Agentverse connection,
+and GitHub write actions are not enabled in the demo.
 The supplied specification and prompt pack are references; the user's local-only scope
 overrides their deployment, publication and per-phase approval instructions.
 
@@ -24,9 +26,11 @@ uv run --frozen python scripts/check_secrets.py
 git diff --check
 ```
 
-No credentials are needed. `.env.example` contains blank names for future integration;
-the local build does not load or use external credentials. Payments and automatic
-merging are rejected by configuration. State and caches belong in ignored directories.
+No credentials are needed for the demo. `.env.example` contains blank variable names.
+The live GitHub adapter accepts a token at construction time, and the OSV adapter uses
+the public API. Live adapters are opt-in and are not selected by the demo. Payments and
+automatic merging are rejected by configuration. State and caches belong in ignored
+directories.
 
 ## Complete local demo
 
@@ -73,7 +77,26 @@ Official interface references checked during implementation:
 - [OSV full records](https://github.com/google/osv.dev/blob/master/docs/api/get-v1-vulns.md)
 
 Fixtures are synthetic API-shaped records, not captured live success. Missing OSV
-coverage returns incomplete analysis. An unknown fixed version stays unknown.
+coverage returns incomplete analysis. An unknown fixed version stays unknown. For an
+application runtime, construct the read-only clients and inject them into the existing
+orchestrator boundary:
+
+```python
+github, osv = make_live_evidence_clients(github_token=os.getenv("GITHUB_TOKEN"))
+orchestrator = make_orchestrator(
+    store,
+    health_client=health_client,
+    github_client=github,
+    osv_client=osv,
+    reasoning_client=reasoning_client,
+)
+```
+
+The live clients cap API response sizes, disable redirects and proxy environment
+settings, and only call fixed GitHub/OSV API hosts. They perform read requests only.
+The GitHub token needs repository read access for private repositories; public
+repositories can be queried without a token. No real API calls were made during this
+change.
 On restricted Windows hosts, asyncio may require permission to open its internal
 loopback socket pair even when all service calls are mocked.
 

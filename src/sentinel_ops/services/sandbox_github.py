@@ -19,6 +19,8 @@ class PullRequestClient(Protocol):
 
 
 class SandboxGitHubClient:
+    simulated = True
+
     def __init__(self, store: StateStore, repository: str = "demo/checkout"):
         if repository != "demo/checkout":
             raise ValueError("Only the fictional local demo repository is supported")

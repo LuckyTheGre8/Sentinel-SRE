@@ -24,7 +24,14 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures"
 
 
-def make_orchestrator(store, health_client=None):
+def make_orchestrator(
+    store,
+    health_client=None,
+    *,
+    github_client=None,
+    osv_client=None,
+    reasoning_client=None,
+):
     health_client = health_client or HttpHealthClient(
         allowed_urls={"https://checkout.example/health"},
         transport=httpx.MockTransport(lambda request: httpx.Response(503, text="synthetic outage")),
@@ -32,10 +39,18 @@ def make_orchestrator(store, health_client=None):
     return SentinelOrchestrator(
         store,
         TelemetryWatchdog(health_client),
-        CommitDetective(RecordedGitHubClient(FIXTURES / "github.json")),
-        SecurityInvestigator(RecordedOSVClient(FIXTURES / "osv.json")),
-        LocalReasoningClient(),
+        CommitDetective(github_client or RecordedGitHubClient(FIXTURES / "github.json")),
+        SecurityInvestigator(osv_client or RecordedOSVClient(FIXTURES / "osv.json")),
+        reasoning_client or LocalReasoningClient(),
     )
+
+
+def make_live_evidence_clients(github_token: str | None = None):
+    """Construct live, read-only GitHub and OSV adapters for explicit runtime wiring."""
+    from sentinel_ops.services.github_client import LiveGitHubClient
+    from sentinel_ops.services.osv_client import LiveOSVClient
+
+    return LiveGitHubClient(token=github_token), LiveOSVClient()
 
 
 async def simulate():

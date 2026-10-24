@@ -89,6 +89,7 @@ class SentinelOrchestrator:
         security,
         reasoning: ReasoningClient,
         transport: LocalWorkerTransport | None = None,
+        provider_timeout: float = 3,
     ):
         self.store = store
         self.telemetry = telemetry
@@ -96,6 +97,7 @@ class SentinelOrchestrator:
         self.security = security
         self.reasoning = reasoning
         self.transport = transport or LocalWorkerTransport()
+        self.provider_timeout = provider_timeout
 
     async def investigate(self, context: InvestigationContext) -> IncidentReport:
         self.store.transition(context.investigation_id, Status.COLLECTING)
@@ -124,7 +126,8 @@ class SentinelOrchestrator:
         if commits.success and commits.commits:
             try:
                 files = await asyncio.wait_for(
-                    self.commits.client.files(context.repository, commits.commits[0].sha), 3
+                    self.commits.client.files(context.repository, commits.commits[0].sha),
+                    self.provider_timeout,
                 )
                 security = await self.transport.dispatch(
                     "security",
@@ -154,7 +157,9 @@ class SentinelOrchestrator:
             )
         reasoning_warning = None
         try:
-            hypothesis = await asyncio.wait_for(self.reasoning.synthesize(health, commits), 3)
+            hypothesis = await asyncio.wait_for(
+                self.reasoning.synthesize(health, commits), self.provider_timeout
+            )
         except (TimeoutError, ValueError, OSError):
             hypothesis = IncidentHypothesis(
                 summary="Reasoning unavailable", confidence="insufficient_evidence", evidence_ids=[]
@@ -176,7 +181,7 @@ class SentinelOrchestrator:
         # Never pass free-form model factual claims through just because its references exist.
         selected = candidates.get(hypothesis.commit_sha or "")
         hypothesis.summary = f"Observed health: {health.state}. " + (
-            f"Candidate {selected.sha[:8]} has score {selected.score:.3f} from recorded diff/time correlation; not proof of causation."
+            f"Candidate {selected.sha[:8]} has score {selected.score:.3f} from diff/time correlation; not proof of causation."
             if selected
             else "No evidence-backed commit hypothesis established."
         )

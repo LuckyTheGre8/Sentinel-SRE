@@ -17,6 +17,8 @@ class ReasoningClient(Protocol):
 class LocalReasoningClient:
     """Deterministic simulator, NOT an ASI:One model call."""
 
+    simulated = True
+
     async def extract(self, text: str) -> dict:
         try:
             parsed = json.loads(text)
@@ -71,7 +73,7 @@ class LocalReasoningClient:
             refs.append(f"commit:{top.sha}")
         summary = f"Observed health: {health.state}. "
         if top:
-            summary += f"Candidate {top.sha[:8]} ranks first by recorded diff/time correlation; not proof of causation."
+            summary += f"Candidate {top.sha[:8]} ranks first by diff/time correlation; not proof of causation."
         else:
             summary += "No candidate commit established."
         return IncidentHypothesis(

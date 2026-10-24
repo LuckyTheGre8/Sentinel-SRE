@@ -11,9 +11,9 @@ flowchart TD
     Orchestrator --> Reasoning[Deterministic reasoning adapter]
     Orchestrator --> Health[Telemetry Watchdog]
     Orchestrator --> Commits[Commit Detective]
-    Commits --> GitHub[Recorded GitHub client]
+    Commits --> GitHub[Recorded or live read-only GitHub client]
     Orchestrator --> Security[Security Investigator]
-    Security --> OSV[Recorded OSV batch and detail client]
+    Security --> OSV[Recorded or live OSV batch and detail client]
     Health --> HTTP[Real loopback demo HTTP]
     Orchestrator --> Report[Grounded incident report]
     Report --> Approval[Session-bound confirmation]
@@ -37,7 +37,8 @@ flowchart TD
   explicitly simulated. Report facts are rebuilt from worker evidence and validated
   candidate IDs; unsupported free-form model claims cannot pass through.
 - `HealthClient`, `GitHubClient`, `OSVClient`, and `PullRequestClient` define injectable
-  service boundaries. Live provider adapters are intentionally absent in this scope.
+  service boundaries. `LiveGitHubClient` and `LiveOSVClient` perform bounded read-only
+  API calls when explicitly injected. The demo continues to use recorded fixtures.
 - The chat gateway persists intake and deduplicated replies. Its remediation extension
   handles proposal review and approval. No incoming text becomes a shell command.
   Official protocol handlers are constructed without starting a network Agent.

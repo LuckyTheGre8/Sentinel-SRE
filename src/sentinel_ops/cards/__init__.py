@@ -89,9 +89,9 @@ def validate_card(message: ChatMessage) -> dict:
     return payload
 
 
-def intake(missing: list[str]) -> ChatMessage:
+def intake(missing: list[str], simulated: bool = True) -> ChatMessage:
     return card(
-        "LOCAL SIMULATION: provide and review investigation details.",
+        ("LOCAL SIMULATION: " if simulated else "") + "Provide and review investigation details.",
         Form(
             title="Investigation intake",
             fields=[FormField(name=x, label=x.replace("_", " ")) for x in missing],
@@ -100,11 +100,11 @@ def intake(missing: list[str]) -> ChatMessage:
     )
 
 
-def review_intake(request) -> ChatMessage:
+def review_intake(request, simulated: bool = True) -> ChatMessage:
     return card(
         "Confirm these inputs before collecting evidence.",
         Review(
-            title="Start local investigation",
+            title="Start local investigation" if simulated else "Start live investigation",
             summary_rows=[
                 Row(label=k, value=str(v)) for k, v in request.model_dump(mode="json").items()
             ],
@@ -131,7 +131,9 @@ def progress() -> ChatMessage:
     )
 
 
-def incident_report(report) -> ChatMessage:
+def incident_report(
+    report, simulated: bool = True, remediation_enabled: bool = True, patch_enabled: bool = True
+) -> ChatMessage:
     rows = [
         Row(label="Health", value=report.health.state),
         Row(label="Hypothesis", value=report.hypothesis.summary),
@@ -153,16 +155,19 @@ def incident_report(report) -> ChatMessage:
         CTA(label="View evidence", selection={"action": "evidence"}),
         CTA(label="Cancel", selection={"action": "cancel"}),
     ]
-    if report.commits.success and report.commits.commits:
+    if remediation_enabled and report.commits.success and report.commits.commits:
         actions.insert(0, CTA(label="Review rollback", selection={"action": "review_revert"}))
-        actions.insert(1, CTA(label="Review patch", selection={"action": "review_patch"}))
+        if patch_enabled:
+            actions.insert(1, CTA(label="Review patch", selection={"action": "review_patch"}))
     return card(
-        "LOCAL SIMULATION: evidence-backed incident report.",
+        ("LOCAL SIMULATION: " if simulated else "") + "Evidence-backed incident report.",
         Detail(title="Incident report", summary_rows=rows, ctas=actions),
     )
 
 
-def confirmation(proposal, confirmation_id: str, idempotency_key: str) -> ChatMessage:
+def confirmation(
+    proposal, confirmation_id: str, idempotency_key: str, simulated: bool = True
+) -> ChatMessage:
     selection = {
         "action": "confirm",
         "investigation_id": str(proposal.investigation_id),
@@ -171,9 +176,11 @@ def confirmation(proposal, confirmation_id: str, idempotency_key: str) -> ChatMe
         "idempotency_key": idempotency_key,
     }
     return card(
-        "Explicit approval required. Creates a simulated PR only; no merge.",
+        "Explicit approval required. Creates a simulated PR only; no merge."
+        if simulated
+        else "Explicit approval creates one GitHub draft PR. Review the commit and files; no automatic merge.",
         Review(
-            title="Confirm sandbox remediation",
+            title="Confirm sandbox remediation" if simulated else "Confirm GitHub draft PR",
             summary_rows=[
                 Row(label="Repository", value=proposal.repository),
                 Row(label="Base branch", value=proposal.base_branch),
@@ -181,10 +188,20 @@ def confirmation(proposal, confirmation_id: str, idempotency_key: str) -> ChatMe
                 Row(label="Files", value=", ".join(proposal.expected_files)),
                 Row(label="Commit", value=proposal.commit_sha or "bounded patch"),
                 Row(label="Tests", value=", ".join(proposal.tests)),
-                Row(label="Outcome", value="Simulated PR, no merge"),
+                Row(
+                    label="Outcome",
+                    value="Simulated PR, no merge"
+                    if simulated
+                    else "GitHub draft PR; no merge or deployment",
+                ),
                 Row(label="Risks", value="; ".join(proposal.risks)),
             ],
-            approve_cta=CTA(label="Confirm and create simulated PR", selection=selection),
+            approve_cta=CTA(
+                label="Confirm and create simulated PR"
+                if simulated
+                else "Confirm and create draft PR",
+                selection=selection,
+            ),
             reject_cta=CTA(label="Cancel", selection={"action": "cancel"}),
         ),
     )

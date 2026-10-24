@@ -4,6 +4,10 @@ import logging
 import re
 
 PATTERNS = [
+    (
+        r"""(?is)((?:api[_-]?key|password|secret|token|seed)[\w-]*["']?\s*[:=]\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')""",
+        r"\1[REDACTED]",
+    ),
     (r"(?i)(authorization[\s\"':=]+)(?:bearer\s+|basic\s+)?[^\s,}\"']+", r"\1[REDACTED]"),
     (
         r"(?i)((?:api[_-]?key|password|secret|token|seed)[\w-]*[\s\"':=]+)[^\s,}\"']+",

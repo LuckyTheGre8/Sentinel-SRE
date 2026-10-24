@@ -17,7 +17,7 @@ from sentinel_ops.schemas import (
     Status,
     utcnow,
 )
-from sentinel_ops.services.sandbox_github import SandboxGitHubClient, digest
+from sentinel_ops.services.sandbox_github import digest
 from sentinel_ops.state import StateStore
 
 BAD_COMMIT = "b" * 40
@@ -31,23 +31,24 @@ def action_key(proposal: RemediationProposal) -> str:
     return hashlib.sha256(proposal.model_dump_json().encode()).hexdigest()
 
 
-def pr_body(proposal: RemediationProposal) -> str:
+def pr_body(proposal: RemediationProposal, simulated: bool = True) -> str:
     evidence = "\n".join(f"- {e.id}: {e.summary}" for e in proposal.evidence)
     return (
-        f"# LOCAL SIMULATED PR\nInvestigation: {proposal.investigation_id}\n"
-        f"Incident: demo checkout investigation\nAction: {proposal.action}\n"
+        ("# LOCAL SIMULATED PR\n" if simulated else "# Confirmed Sentinel-Ops remediation\n")
+        + f"Investigation: {proposal.investigation_id}\n"
+        f"Repository: {proposal.repository}\nAction: {proposal.action}\n"
         f"Confidence: {proposal.confidence}; correlation is not proof\n"
         f"Files: {', '.join(proposal.expected_files)}\nEvidence:\n{evidence}\n"
-        "Validation: approved path/size/baseline hashes and configuration JSON checked.\n"
+        "Validation: approved path/size/baseline hashes checked; no project tests executed remotely.\n"
         f"Requested tests: {', '.join(proposal.tests)}. Health recovery not yet verified.\n"
-        "Rollback: restore the saved pre-action sandbox snapshot using a fresh demo reset.\n"
+        "Rollback: close the unmerged PR; if manually merged, review a separate revert PR.\n"
         f"Security: {'dependency manifest changed; inspect approved replacement' if 'requirements.txt' in proposal.replacements else 'no dependency remediation claimed'}.\n"
-        "Agent-generated and explicitly user-approved in the local simulator. No GitHub write or merge.\n"
+        "Agent-generated and explicitly user-approved. Automatic merging is disabled.\n"
     )
 
 
 class RemediationExecutor:
-    def __init__(self, store: StateStore, client: SandboxGitHubClient):
+    def __init__(self, store: StateStore, client):
         self.store = store
         self.client = client
 
@@ -91,6 +92,9 @@ class RemediationExecutor:
             tests=["validate config JSON", "independent local HTTP health check"],
         )
         self.client.validate(proposal)
+        return self.save_proposal(proposal, session)
+
+    def save_proposal(self, proposal: RemediationProposal, session: str):
         # The proposal object is serialized before it leaves this boundary. Callers cannot mutate approval.
         nonce = str(uuid4())
         key = action_key(proposal)
@@ -102,7 +106,7 @@ class RemediationExecutor:
             "expires": (utcnow() + timedelta(minutes=10)).isoformat(),
         }
         self.store.put("proposal", str(proposal.proposal_id), json.dumps(document))
-        self.store.put("active_proposal", str(investigation_id), str(proposal.proposal_id))
+        self.store.put("active_proposal", str(proposal.investigation_id), str(proposal.proposal_id))
         return proposal, nonce, key
 
     async def execute(self, request: RemediationExecutionRequest) -> RemediationExecutionResponse:
@@ -111,6 +115,7 @@ class RemediationExecutor:
                 investigation_id=request.investigation_id,
                 success=False,
                 error=AgentError(code=code, message=message),
+                simulated=getattr(self.client, "simulated", True),
             )
 
         raw = self.store.read("proposal", str(request.proposal_id))
@@ -142,7 +147,7 @@ class RemediationExecutor:
             request.proposal_id
         ):
             return fail("stale_proposal", "A newer proposal supersedes this action")
-        if utcnow().isoformat() > saved["expires"]:
+        if context.status != Status.EXECUTING and utcnow().isoformat() > saved["expires"]:
             return fail("expired_confirmation", "Review a new proposal")
         if context.status not in {Status.AWAITING, Status.EXECUTING}:
             return fail("invalid_state", "Investigation cannot execute")
@@ -150,8 +155,15 @@ class RemediationExecutor:
             self.client.validate(proposal)
             if context.status == Status.AWAITING:
                 self.store.transition(request.investigation_id, Status.EXECUTING)
-            number, url = await self.client.create_pr(proposal, saved["key"], pr_body(proposal))
-        except (ValueError, OSError, sqlite3.Error):
+            number, url = await self.client.create_pr(
+                proposal, saved["key"], pr_body(proposal, getattr(self.client, "simulated", True))
+            )
+        except (ValueError, OSError, sqlite3.Error) as error:
+            if isinstance(error, OSError) and not getattr(self.client, "simulated", True):
+                return fail(
+                    "remote_action_pending",
+                    "GitHub outcome may be incomplete. Repeat the same confirmation to reconcile; do not create a new proposal.",
+                )
             if self.store.get(request.investigation_id).status == Status.EXECUTING:
                 self.store.transition(request.investigation_id, Status.FAILED)
             return fail(
@@ -163,10 +175,16 @@ class RemediationExecutor:
             pr_number=number,
             pr_url=url,
             validation="Static proposal checks passed; health verification pending",
-            warnings=["Simulated local PR only; service state unchanged"],
+            simulated=getattr(self.client, "simulated", True),
+            warnings=[
+                "PR created; service state unchanged. Manual merge and recovery verification required."
+            ],
             evidence=[
                 Evidence(
-                    id=f"pr:{number}", source="sandbox", summary="Confirmed simulated PR created"
+                    id=f"pr:{number}",
+                    source="sandbox" if getattr(self.client, "simulated", True) else "github-api",
+                    summary="Confirmed PR result",
+                    simulated=getattr(self.client, "simulated", True),
                 )
             ],
         )

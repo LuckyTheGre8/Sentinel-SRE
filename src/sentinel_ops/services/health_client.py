@@ -69,17 +69,22 @@ class HttpHealthClient:
         local_demo: bool = False,
         transport: httpx.AsyncBaseTransport | None = None,
         max_bytes: int = 4096,
+        public_targets: bool = False,
     ):
         self.allowed_urls = frozenset(allowed_urls)
         self.local_demo = local_demo
         self.simulated = transport is not None
         self.max_bytes = max_bytes
+        self.public_targets = public_targets
         if not 128 <= max_bytes <= 65536:
             raise ValueError("Invalid response bound")
         if transport is None:
             for url in allowed_urls:
                 validate_url(url, local_demo)
-                if (
+                if public_targets:
+                    if local_demo or urlsplit(url).scheme != "https":
+                        raise ValueError("Public probes require HTTPS outside demo mode")
+                elif (
                     not local_demo
                     or not ipaddress.ip_address(urlsplit(url).hostname or "").is_loopback
                 ):
@@ -95,14 +100,25 @@ class HttpHealthClient:
         except ValueError:
             return Probe(failure="unsafe_url", excerpt="URL rejected by local policy")
         try:
+            from sentinel_ops.services.public_transport import PublicHTTPStransport
+
             async with asyncio.timeout(timeout):
                 async with httpx.AsyncClient(
-                    transport=self.transport,
+                    transport=self.transport
+                    or (PublicHTTPStransport() if self.public_targets else None),
                     trust_env=False,
                     follow_redirects=False,
                     timeout=timeout,
+                    headers={"Accept-Encoding": "identity"},
                 ) as client:
                     async with client.stream("GET", endpoint) as response:
+                        if response.headers.get("content-encoding", "identity").lower() not in {
+                            "identity",
+                            "",
+                        }:
+                            return Probe(
+                                failure="connection", excerpt="Compressed health response rejected"
+                            )
                         data = bytearray()
                         async for chunk in response.aiter_bytes(chunk_size=512):
                             data.extend(chunk[: max(0, self.max_bytes - len(data))])
@@ -124,3 +140,25 @@ class HttpHealthClient:
                 latency_ms=(time.perf_counter() - start) * 1000,
                 excerpt=f"Probe failed: {failure}",
             )
+
+
+class PublicHealthClient:
+    """Live public HTTPS probes, optionally restricted by an operator allowlist."""
+
+    simulated = False
+
+    def __init__(self, allowed_urls: set[str] | None = None):
+        self.allowed_urls = allowed_urls or set()
+
+    async def probe(self, endpoint: str, timeout: float) -> Probe:
+        try:
+            validate_url(endpoint)
+            parsed = urlsplit(endpoint)
+            if parsed.scheme != "https" or parsed.port not in {None, 443}:
+                raise ValueError("Only standard HTTPS is allowed")
+            if self.allowed_urls and endpoint not in self.allowed_urls:
+                raise ValueError("Target outside configured scope")
+            client = HttpHealthClient(allowed_urls={endpoint}, public_targets=True)
+        except ValueError:
+            return Probe(failure="unsafe_url", excerpt="Public target rejected")
+        return await client.probe(endpoint, timeout)

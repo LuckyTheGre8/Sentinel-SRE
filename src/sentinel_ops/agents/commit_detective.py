@@ -13,14 +13,17 @@ from sentinel_ops.services.github_client import GitHubClient
 
 
 class CommitDetective:
-    def __init__(self, client: GitHubClient):
+    def __init__(self, client: GitHubClient, timeout: float = 3):
         self.client = client
+        self.timeout = timeout
 
     async def run(self, request: CommitAnalysisRequest) -> CommitAnalysisResponse:
         start = utcnow()
+        simulated = getattr(self.client, "simulated", True)
         try:
             commits = await asyncio.wait_for(
-                self.client.commits(request.repository, request.branch, request.max_commits), 3
+                self.client.commits(request.repository, request.branch, request.max_commits),
+                self.timeout,
             )
         except (OSError, ValueError, TimeoutError):
             return CommitAnalysisResponse(
@@ -28,12 +31,13 @@ class CommitDetective:
                 success=False,
                 error=AgentError(
                     code="github_unavailable",
-                    message="Recorded GitHub evidence unavailable",
+                    message="GitHub evidence unavailable",
                     retryable=True,
                 ),
             )
         candidates = []
-        warnings = ["Recorded GitHub evidence; correlation is not proof"]
+        warnings = ["Recorded GitHub evidence; correlation is not proof"] if simulated else []
+        warnings.append("Commit correlation is not proof of causation")
         for commit in commits:
             if (
                 not request.incident_at - timedelta(hours=request.lookback_hours)
@@ -77,7 +81,12 @@ class CommitDetective:
             commits=candidates,
             warnings=warnings,
             evidence=[
-                Evidence(id=f"commit:{c.sha}", source="github-recorded", summary=c.explanation)
+                Evidence(
+                    id=f"commit:{c.sha}",
+                    source="github-recorded" if simulated else "github-api",
+                    summary=c.explanation,
+                    simulated=simulated,
+                )
                 for c in candidates
             ],
         )
