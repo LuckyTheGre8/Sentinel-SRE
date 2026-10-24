@@ -36,6 +36,21 @@ class RuntimeSettings(BaseModel):
     endpoint: str | None = None
     port: int = Field(default=8001, ge=1024, le=65535)
     pr_writes: bool = False
+    orchestrator_seed: SecretStr | None = None
+    telemetry_seed: SecretStr | None = None
+    commit_seed: SecretStr | None = None
+    security_seed: SecretStr | None = None
+    remediation_seed: SecretStr | None = None
+    orchestrator_port: int = Field(default=8005, ge=1024, le=65535)
+    telemetry_port: int = Field(default=8001, ge=1024, le=65535)
+    commit_port: int = Field(default=8002, ge=1024, le=65535)
+    security_port: int = Field(default=8003, ge=1024, le=65535)
+    remediation_port: int = Field(default=8004, ge=1024, le=65535)
+    orchestrator_address: str | None = None
+    telemetry_address: str | None = None
+    commit_address: str | None = None
+    security_address: str | None = None
+    remediation_address: str | None = None
 
     @model_validator(mode="after")
     def validate_scope(self):
@@ -82,11 +97,27 @@ def environment(root: Path) -> dict[str, str]:
 
 
 def load_settings(root: Path) -> RuntimeSettings:
+    from sentinel_ops.discovery import discover_peer_addresses
+
     env = environment(root)
-    seed_path = root / ".local" / "runtime" / "agent.seed"
-    seed = env.get("ORCHESTRATOR_SEED") or (
-        seed_path.read_text().strip() if seed_path.exists() else ""
+    runtime_dir = root / ".local" / "runtime"
+    seed_path = runtime_dir / "agent.seed"
+    orch_seed_path = runtime_dir / "orchestrator.seed"
+    seed = (
+        env.get("ORCHESTRATOR_SEED")
+        or (orch_seed_path.read_text().strip() if orch_seed_path.exists() else "")
+        or (seed_path.read_text().strip() if seed_path.exists() else "")
     )
+    peers = discover_peer_addresses(runtime_dir, env)
+
+    def read_seed(name: str, env_var: str) -> SecretStr | None:
+        val = env.get(env_var)
+        if not val:
+            sp = runtime_dir / f"{name}.seed"
+            if sp.exists():
+                val = sp.read_text(encoding="utf-8").strip()
+        return SecretStr(val) if val else None
+
     return RuntimeSettings(
         asi1_api_key=SecretStr(env.get("ASI1_API_KEY") or env.get("ASI_ONE_API_KEY", "")),
         agent_seed=SecretStr(seed),
@@ -104,8 +135,23 @@ def load_settings(root: Path) -> RuntimeSettings:
         model=env.get("ASI1_MODEL") or "asi1-mini",
         mailbox=env.get("AGENT_MAILBOX", "true").lower() == "true",
         endpoint=env.get("AGENT_ENDPOINT") or None,
-        port=int(env.get("AGENT_PORT") or "8001"),
+        port=int(env.get("ORCHESTRATOR_PORT") or env.get("AGENT_PORT") or "8005"),
         pr_writes=env.get("GITHUB_PR_WRITES", "").lower() == "true",
+        orchestrator_seed=SecretStr(seed) if seed else None,
+        telemetry_seed=read_seed("telemetry", "TELEMETRY_SEED"),
+        commit_seed=read_seed("commit", "COMMIT_SEED"),
+        security_seed=read_seed("security", "SECURITY_SEED"),
+        remediation_seed=read_seed("remediation", "REMEDIATION_SEED"),
+        orchestrator_port=int(env.get("ORCHESTRATOR_PORT") or "8005"),
+        telemetry_port=int(env.get("TELEMETRY_PORT") or "8001"),
+        commit_port=int(env.get("COMMIT_PORT") or "8002"),
+        security_port=int(env.get("SECURITY_PORT") or "8003"),
+        remediation_port=int(env.get("REMEDIATION_PORT") or "8004"),
+        orchestrator_address=peers.get("orchestrator"),
+        telemetry_address=peers.get("telemetry"),
+        commit_address=peers.get("commit"),
+        security_address=peers.get("security"),
+        remediation_address=peers.get("remediation"),
     )
 
 

@@ -7,6 +7,7 @@ from uagents import Protocol
 from uagents_core.contrib.protocols.chat import (
     ChatAcknowledgement,
     ChatMessage,
+    MetadataContent,
     StartSessionContent,
     TextContent,
     chat_protocol_spec,
@@ -42,9 +43,18 @@ class ChatGateway:
             return [ack, *[ChatMessage.model_validate(x) for x in json.loads(cached)]]
         try:
             content = [c for c in message.content if not isinstance(c, StartSessionContent)]
-            if not content or any(not isinstance(c, TextContent) for c in content):
-                raise ValueError("Only text and card selection inputs supported locally")
-            text = "\n".join(c.text for c in content)
+            if not content:
+                raise ValueError("Empty message")
+            
+            # Check for unsupported content types (images, resources, etc.)
+            unsupported = [c for c in content if not isinstance(c, (TextContent, MetadataContent))]
+            if unsupported:
+                raise ValueError(
+                    "This agent only supports text input. Images, files, and other media "
+                    "cannot be processed. Please describe what you need in text."
+                )
+            
+            text = "\n".join(c.text for c in content if isinstance(c, TextContent))
             if len(text.encode()) > 8192:
                 raise ValueError("Input exceeds local limit")
             data = await self.orchestrator.reasoning.extract(text)

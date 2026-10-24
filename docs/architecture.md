@@ -1,30 +1,35 @@
-# Local architecture
+# Sentinel-Ops Architecture
 
-This build completes Prompts 1–5 only. All five roles are independent Python components
-using shared typed contracts. No deployment or publication is attempted.
+Sentinel-Ops supports both single-process local evaluation and a fully distributed **5 standalone uAgents** deployment communicating over native Fetch.ai protocols and registered on Agentverse Mailbox.
 
 ```mermaid
 flowchart TD
-    User[Local ASI One style conversation] --> ACP[Official ACP envelopes]
-    ACP --> Gateway[Session and card interaction]
-    Gateway --> Orchestrator[Sentinel Orchestrator]
-    Orchestrator --> Reasoning[Deterministic reasoning adapter]
-    Orchestrator --> Health[Telemetry Watchdog]
-    Orchestrator --> Commits[Commit Detective]
-    Commits --> GitHub[Recorded or live read-only GitHub client]
-    Orchestrator --> Security[Security Investigator]
-    Security --> OSV[Recorded or live OSV batch and detail client]
-    Health --> HTTP[Real loopback demo HTTP]
-    Orchestrator --> Report[Grounded incident report]
-    Report --> Approval[Session-bound confirmation]
-    Approval --> Executor[Remediation Executor]
-    Executor --> PR[SQLite simulated PR]
-    PR --> Apply[Explicit local demo apply hook]
-    Apply --> Snapshot[Sandbox configuration snapshot]
-    Snapshot --> HTTP
-    HTTP --> Verification[Independent health verification]
-    Verification --> Resolution[Resolution card]
+    User["Operator / Chat UI (ACP)"] --> Orchestrator["Sentinel-Orchestrator (Port 8005)"]
+    Orchestrator --> Reasoning["ASI:One Reasoning Engine"]
+    
+    subgraph "Worker Agents"
+        Orchestrator -.->|"SentinelHealth"| Telemetry["Sentinel-Telemetry (Port 8001)"]
+        Orchestrator -.->|"SentinelCommit"| Commit["Sentinel-Commit (Port 8002)"]
+        Orchestrator -.->|"SentinelSecurity"| Security["Sentinel-Security (Port 8003)"]
+        Orchestrator -.->|"SentinelRemediation"| Remediation["Sentinel-Remediation (Port 8004)"]
+    end
+
+    Telemetry --> HealthProbes["Remote / Loopback Health Probes"]
+    Commit --> GitHub["GitHub API / Recorded Fixtures"]
+    Security --> OSV["OSV API / Static Code SAST"]
+    Remediation --> SandboxPR["Sandbox PR / Live GitHub PR"]
 ```
+
+## Multi-Agent Architecture (5 Standalone uAgents)
+
+In distributed multi-agent mode, each role is a standalone `uagents.Agent` process:
+1. **Sentinel-Telemetry** (`port=8001`, `TELEMETRY_SEED`): Probes endpoints and verifies recovery.
+2. **Sentinel-Commit** (`port=8002`, `COMMIT_SEED`): Inspects commits, ranks blame, extracts candidate revision tree files.
+3. **Sentinel-Security** (`port=8003`, `SECURITY_SEED`): Performs OSV vulnerability analysis and SAST.
+4. **Sentinel-Remediation** (`port=8004`, `REMEDIATION_SEED`): Manages sandbox PR creation and revert proposals.
+5. **Sentinel-Orchestrator** (`port=8005`, `ORCHESTRATOR_SEED`): Coordinates workflows, runs ASI:One synthesis, and serves ACP chat.
+
+See [multi-agent-deployment.md](file:///C:/Users/hp/Downloads/Sentinel-SRE%202/Sentinel-SRE/docs/multi-agent-deployment.md) for full deployment instructions.
 
 ## Boundaries
 
